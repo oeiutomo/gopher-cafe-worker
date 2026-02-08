@@ -3,6 +3,7 @@ package coffeeshop
 import (
 	"context"
 	"github.com/ajaibid/coin-common-golang/logger"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,11 +14,17 @@ import (
 type CoffeeshopUsecase struct {
 	totalRequests int64
 	totalOrders   int64
-	p90RequestsMs int64
+
+	durations    []int64
+	durationIdx  int64 // Atomic counter
+	maxDurations int
 }
 
 func NewCoffeeshopUsecase() *CoffeeshopUsecase {
-	return &CoffeeshopUsecase{}
+	return &CoffeeshopUsecase{
+		maxDurations: 10000,
+		durations:    make([]int64, 10000),
+	}
 }
 
 func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Order, baristas int) []entity.OrderResult {
@@ -123,12 +130,36 @@ func (u *CoffeeshopUsecase) recordOrderStats(res entity.OrderResult) {
 	atomic.AddInt64(&u.totalOrders, 1)
 	if len(res.Steps) > 0 {
 		duration := res.Steps[len(res.Steps)-1].EndTimeMs - res.Steps[0].StartTimeMs
-		atomic.AddInt64(&u.p90RequestsMs, duration)
+		idx := atomic.AddInt64(&u.durationIdx, 1) - 1
+		position := int(idx) % u.maxDurations
+		atomic.StoreInt64(&u.durations[position], duration)
 	}
 }
 
 func (u *CoffeeshopUsecase) GetStats() (int64, int64, int64) {
-	return atomic.LoadInt64(&u.totalRequests),
-		atomic.LoadInt64(&u.totalOrders),
-		atomic.LoadInt64(&u.p90RequestsMs)
+	totalReq := atomic.LoadInt64(&u.totalRequests)
+	totalOrd := atomic.LoadInt64(&u.totalOrders)
+	totalRecorded := atomic.LoadInt64(&u.durationIdx)
+
+	p90 := int64(0)
+	if totalRecorded > 0 {
+		validCount := int(totalRecorded)
+		if validCount > u.maxDurations {
+			validCount = u.maxDurations
+		}
+
+		sorted := make([]int64, validCount)
+		for i := 0; i < validCount; i++ {
+			sorted[i] = atomic.LoadInt64(&u.durations[i])
+		}
+
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+		idx := int(float64(len(sorted)) * 0.9)
+		if idx >= len(sorted) {
+			idx = len(sorted) - 1
+		}
+		p90 = sorted[idx]
+	}
+
+	return totalReq, totalOrd, p90
 }
