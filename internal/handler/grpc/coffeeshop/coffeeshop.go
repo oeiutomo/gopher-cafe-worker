@@ -3,6 +3,7 @@ package coffeeshop
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,6 +33,10 @@ func NewCoffeeshopGrpcHandler(uc CoffeeshopUsecase) *CoffeeshopGrpcHandler {
 
 // ExecuteBrew (CRP-01) triggers the simulation
 func (h *CoffeeshopGrpcHandler) ExecuteBrew(ctx context.Context, req *pb.ExecuteBrewRequest) (*pb.ExecuteBrewResponse, error) {
+	// TODO: put 2s as config
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	logger.Infof("Incoming request: %+v", req)
 	// 1. CRP-01: Validation
 	if !(req.Baristas >= 1) {
@@ -55,7 +60,17 @@ func (h *CoffeeshopGrpcHandler) ExecuteBrew(ctx context.Context, req *pb.Execute
 	}
 
 	// 3. Execution: Call the Usecase
-	results := h.uc.ExecuteBrew(internalOrders, int(req.Baristas))
+	resultChan := make(chan []entity.OrderResult, 1)
+	go func() {
+		resultChan <- h.uc.ExecuteBrew(internalOrders, int(req.Baristas))
+	}()
+
+	var results []entity.OrderResult
+	select {
+	case results = <-resultChan:
+	case <-ctx.Done():
+		return nil, status.Error(codes.DeadlineExceeded, "context timeout exceeded")
+	}
 
 	// 4. Mapping: Domain Entities -> Protobuf Response (CRP-05)
 	protoResults := make([]*pb.Result, len(results))
