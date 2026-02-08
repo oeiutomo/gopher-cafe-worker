@@ -54,7 +54,7 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 					startStep := time.Now().UnixMilli()
 
 					// processOrder
-					if err := u.processStep(ctx, step.Duration); err != nil {
+					if err := u.processStep(ctx, step); err != nil {
 						return
 					}
 
@@ -85,8 +85,22 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 	return results
 }
 
-func (u *CoffeeshopUsecase) processStep(ctx context.Context, duration time.Duration) error {
-	timer := time.NewTimer(duration)
+func (u *CoffeeshopUsecase) processStep(ctx context.Context, step *entity.RecipeStep) error {
+	select {
+	case step.Semaphore <- struct{}{}:
+		// release semaphore
+		defer func() { <-step.Semaphore }()
+
+		return u.doProcessStep(ctx, step)
+
+	case <-ctx.Done():
+		logger.Warn("context TIMEOUT exceeded waiting for semaphore")
+		return ctx.Err()
+	}
+}
+
+func (u *CoffeeshopUsecase) doProcessStep(ctx context.Context, step *entity.RecipeStep) error {
+	timer := time.NewTimer(step.Duration)
 	defer timer.Stop()
 
 	select {
@@ -94,7 +108,7 @@ func (u *CoffeeshopUsecase) processStep(ctx context.Context, duration time.Durat
 		return nil
 
 	case <-ctx.Done():
-		logger.Warn("context TIMEOUT exceeded")
+		logger.Warn("context TIMEOUT exceeded during processing step")
 		return ctx.Err()
 	}
 }

@@ -37,11 +37,6 @@ func NewRecipeStep(equipment EquipmentType, duration time.Duration, semaphoreCap
 		Semaphore: make(chan struct{}, semaphoreCapacity),
 	}
 
-	// initiate semaphore
-	for i := 0; i < semaphoreCapacity; i++ {
-		equip.Semaphore <- struct{}{}
-	}
-
 	return equip
 }
 
