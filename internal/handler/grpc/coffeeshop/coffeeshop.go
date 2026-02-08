@@ -15,7 +15,7 @@ import (
 )
 
 type CoffeeshopUsecase interface {
-	ExecuteBrew(orders []entity.Order, baristas int) []entity.OrderResult
+	ExecuteBrew(ctx context.Context, orders []entity.Order, baristas int) []entity.OrderResult
 	GetStats() (int64, int64, int64)
 }
 
@@ -62,7 +62,7 @@ func (h *CoffeeshopGrpcHandler) ExecuteBrew(ctx context.Context, req *pb.Execute
 	// 3. Execution: Call the Usecase
 	resultChan := make(chan []entity.OrderResult, 1)
 	go func() {
-		resultChan <- h.uc.ExecuteBrew(internalOrders, int(req.Baristas))
+		resultChan <- h.uc.ExecuteBrew(ctx, internalOrders, int(req.Baristas))
 	}()
 
 	var results []entity.OrderResult

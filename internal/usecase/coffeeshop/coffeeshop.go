@@ -1,6 +1,9 @@
 package coffeeshop
 
 import (
+	"context"
+	"github.com/ajaibid/coin-common-golang/logger"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,30 +20,83 @@ func NewCoffeeshopUsecase() *CoffeeshopUsecase {
 	return &CoffeeshopUsecase{}
 }
 
-func (u *CoffeeshopUsecase) ExecuteBrew(orders []entity.Order, baristas int) []entity.OrderResult {
-	atomic.AddInt64(&u.totalRequests, 1)
+func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Order, baristas int) []entity.OrderResult {
+	// add number of orders as global totalRequests
+	atomic.AddInt64(&u.totalRequests, int64(len(orders)))
 
 	results := make([]entity.OrderResult, 0, len(orders))
 
-	for _, order := range orders {
-		recipe := entity.Recipes[order.Drink]
-		res := entity.OrderResult{OrderID: order.ID}
-
-		for _, step := range recipe {
-			startStep := time.Now().UnixMilli()
-			time.Sleep(step.Duration)
-			endStep := time.Now().UnixMilli()
-
-			res.Steps = append(res.Steps, entity.StepExecution{
-				Equipment:   step.Equipment,
-				StartTimeMs: startStep,
-				EndTimeMs:   endStep,
-			})
-		}
-		results = append(results, res)
-		u.recordOrderStats(res)
+	// order channel as goroutine input
+	orderChan := make(chan entity.Order, len(orders))
+	for _, ord := range orders {
+		orderChan <- ord
 	}
+	close(orderChan)
+
+	// result channel as goroutine output
+	resultChan := make(chan entity.OrderResult, len(orders))
+
+	// WG for barista, will indicates
+	var wg sync.WaitGroup
+	wg.Add(baristas)
+
+	for i := 0; i < baristas; i++ {
+		// barisa goroutine
+		go func(id int) {
+			defer wg.Done()
+
+			// 1 barista take 1 order from order channel
+			for order := range orderChan {
+				recipe := entity.Recipes[order.Drink]
+
+				res := entity.OrderResult{OrderID: order.ID}
+				for _, step := range recipe {
+					startStep := time.Now().UnixMilli()
+
+					// processOrder
+					if err := u.processStep(ctx, step.Duration); err != nil {
+						return
+					}
+
+					res.Steps = append(res.Steps, entity.StepExecution{
+						Equipment:   step.Equipment,
+						StartTimeMs: startStep,
+						EndTimeMs:   time.Now().UnixMilli(),
+					})
+				}
+
+				u.recordOrderStats(res)
+				resultChan <- res
+			}
+		}(i)
+	}
+
+	// wait until all baristas process all orders
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// convert result from channel to array
+	for result := range resultChan {
+		results = append(results, result)
+	}
+
 	return results
+}
+
+func (u *CoffeeshopUsecase) processStep(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+
+	case <-ctx.Done():
+		logger.Warn("context TIMEOUT exceeded")
+		return ctx.Err()
+	}
 }
 
 func (u *CoffeeshopUsecase) recordOrderStats(res entity.OrderResult) {
