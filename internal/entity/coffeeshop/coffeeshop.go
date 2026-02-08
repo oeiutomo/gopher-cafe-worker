@@ -1,6 +1,8 @@
 package coffeeshop
 
-import "time"
+import (
+	"time"
+)
 
 type EquipmentType int
 
@@ -25,26 +27,50 @@ const (
 type RecipeStep struct {
 	Equipment EquipmentType
 	Duration  time.Duration
+	Semaphore chan struct{}
 }
 
-var Recipes = map[DrinkType][]RecipeStep{
+func NewRecipeStep(equipment EquipmentType, duration time.Duration, semaphoreCapacity int) *RecipeStep {
+	equip := &RecipeStep{
+		Equipment: equipment,
+		Duration:  duration,
+		Semaphore: make(chan struct{}, semaphoreCapacity),
+	}
+
+	// initiate semaphore
+	for i := 0; i < semaphoreCapacity; i++ {
+		equip.Semaphore <- struct{}{}
+	}
+
+	return equip
+}
+
+var (
+	Grinder         = NewRecipeStep(EquipGrinder, 5*time.Millisecond, 1)
+	EspressoMachine = NewRecipeStep(EquipEspressoMachine, 8*time.Millisecond, 2)
+	MilkSteamer     = NewRecipeStep(EquipMilkSteamer, 15*time.Millisecond, 1)
+	Blender         = NewRecipeStep(EquipBlender, 12*time.Millisecond, 1)
+	Whisk           = NewRecipeStep(EquipWhisk, 3*time.Millisecond, 2)
+)
+
+var Recipes = map[DrinkType][]*RecipeStep{
 	DrinkEspresso: {
-		{EquipGrinder, 5 * time.Millisecond},
-		{EquipEspressoMachine, 8 * time.Millisecond},
+		Grinder,
+		EspressoMachine,
 	},
 	DrinkLatte: {
-		{EquipGrinder, 5 * time.Millisecond},
-		{EquipEspressoMachine, 8 * time.Millisecond},
-		{EquipMilkSteamer, 15 * time.Millisecond},
+		Grinder,
+		EspressoMachine,
+		MilkSteamer,
 	},
 	DrinkFrappe: {
-		{EquipGrinder, 5 * time.Millisecond},
-		{EquipBlender, 12 * time.Millisecond},
+		Grinder,
+		Blender,
 	},
 	DrinkMatcha: {
-		{EquipGrinder, 5 * time.Millisecond},
-		{EquipMilkSteamer, 15 * time.Millisecond},
-		{EquipWhisk, 3 * time.Millisecond},
+		Grinder,
+		MilkSteamer,
+		Whisk,
 	},
 }
 
