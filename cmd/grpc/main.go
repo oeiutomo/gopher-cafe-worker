@@ -1,6 +1,7 @@
 package main
 
 import (
+	coffeeshop "gopher-cafe/internal/usecase/metrics"
 	"log"
 	"net"
 	"strconv"
@@ -35,8 +36,9 @@ func main() {
 	})
 
 	// Initialize the Layers
-	coffeeUsecase := usecase.NewCoffeeshopUsecase()
-	coffeeHandler := handler.NewCoffeeshopGrpcHandler(coffeeUsecase)
+	orderMetrics := coffeeshop.NewOrderMetrics(cfg.Cafe.OrderDurationsCap)
+	coffeeUsecase := usecase.NewCoffeeshopUsecase(orderMetrics)
+	coffeeHandler := handler.NewCoffeeshopGrpcHandler(&cfg.Cafe, coffeeUsecase)
 
 	// Create the gRPC Server instance
 	grpcServer := grpc.NewServer()

@@ -21,7 +21,7 @@ func TestExecuteBrew(t *testing.T) {
 
 	// Create the generated mock
 	mockUC := NewMockCoffeeshopUsecase(ctrl)
-	handler := NewCoffeeshopGrpcHandler(mockUC)
+	handler := NewCoffeeshopGrpcHandler(nil, mockUC)
 
 	// Define test cases
 	tests := []struct {
@@ -42,7 +42,7 @@ func TestExecuteBrew(t *testing.T) {
 			mockExpect: func() {
 				// We expect the usecase to be called exactly once
 				mockUC.EXPECT().
-					ExecuteBrew(gomock.Len(1), 1).
+					ExecuteBrew(context.Background(), gomock.Len(1), 1).
 					Return([]entity.OrderResult{
 						{
 							OrderID: 101,

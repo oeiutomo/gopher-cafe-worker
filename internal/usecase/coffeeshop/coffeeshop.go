@@ -3,33 +3,26 @@ package coffeeshop
 import (
 	"context"
 	"github.com/ajaibid/coin-common-golang/logger"
-	"sort"
+	coffeeshop "gopher-cafe/internal/usecase/metrics"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	entity "gopher-cafe/internal/entity/coffeeshop"
 )
 
 type CoffeeshopUsecase struct {
-	totalRequests int64
-	totalOrders   int64
-
-	durations    []int64
-	durationIdx  int64 // Atomic counter
-	maxDurations int
+	orderMetrics *coffeeshop.OrderMetrics
 }
 
-func NewCoffeeshopUsecase() *CoffeeshopUsecase {
+func NewCoffeeshopUsecase(ordMetrics *coffeeshop.OrderMetrics) *CoffeeshopUsecase {
 	return &CoffeeshopUsecase{
-		maxDurations: 10000,
-		durations:    make([]int64, 10000),
+		orderMetrics: ordMetrics,
 	}
 }
 
 func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Order, baristas int) []entity.OrderResult {
 	// add number of orders as global totalRequests
-	atomic.AddInt64(&u.totalRequests, int64(len(orders)))
+	u.orderMetrics.RecordTotalRequests(len(orders))
 
 	results := make([]entity.OrderResult, 0, len(orders))
 
@@ -43,7 +36,7 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 	// result channel as goroutine output
 	resultChan := make(chan entity.OrderResult, len(orders))
 
-	// WG for barista, will indicates
+	// WG for barista goroutines
 	var wg sync.WaitGroup
 	wg.Add(baristas)
 
@@ -61,13 +54,10 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 					startStep := time.Now().UnixMilli()
 
 					// processOrder
-					if err := u.processStep(ctx, step); err != nil {
+					err := u.processStep(ctx, step)
+					if err != nil {
 						logger.ErrorKV("failed to processStep",
-							logger.KV("host", "localhost"),
-							logger.KV("order", order),
-							logger.KV("step", step),
-							logger.KV("error", err),
-						)
+							logger.KV("order", order), logger.KV("step", step), logger.KV("error", err))
 						break
 					}
 
@@ -78,7 +68,7 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 					})
 				}
 
-				u.recordOrderStats(res)
+				u.orderMetrics.RecordOrder(res)
 				resultChan <- res
 			}
 		}(i)
@@ -107,13 +97,14 @@ func (u *CoffeeshopUsecase) processStep(ctx context.Context, step *entity.Recipe
 		return u.doProcessStep(ctx, step)
 
 	case <-ctx.Done():
-		logger.Warn("context TIMEOUT exceeded waiting for semaphore")
+		logger.Warn("context TIMEOUT on waiting for semaphore")
 		return ctx.Err()
 	}
 }
 
 func (u *CoffeeshopUsecase) doProcessStep(ctx context.Context, step *entity.RecipeStep) error {
 	timer := time.NewTimer(step.Duration)
+	// stop timer
 	defer timer.Stop()
 
 	select {
@@ -121,45 +112,15 @@ func (u *CoffeeshopUsecase) doProcessStep(ctx context.Context, step *entity.Reci
 		return nil
 
 	case <-ctx.Done():
-		logger.Warn("context TIMEOUT exceeded during processing step")
+		logger.Warn("context TIMEOUT on during processing step")
 		return ctx.Err()
 	}
 }
 
-func (u *CoffeeshopUsecase) recordOrderStats(res entity.OrderResult) {
-	atomic.AddInt64(&u.totalOrders, 1)
-	if len(res.Steps) > 0 {
-		duration := res.Steps[len(res.Steps)-1].EndTimeMs - res.Steps[0].StartTimeMs
-		idx := atomic.AddInt64(&u.durationIdx, 1) - 1
-		position := int(idx) % u.maxDurations
-		atomic.StoreInt64(&u.durations[position], duration)
-	}
-}
-
 func (u *CoffeeshopUsecase) GetStats() (int64, int64, int64) {
-	totalReq := atomic.LoadInt64(&u.totalRequests)
-	totalOrd := atomic.LoadInt64(&u.totalOrders)
-	totalRecorded := atomic.LoadInt64(&u.durationIdx)
-
-	p90 := int64(0)
-	if totalRecorded > 0 {
-		validCount := int(totalRecorded)
-		if validCount > u.maxDurations {
-			validCount = u.maxDurations
-		}
-
-		sorted := make([]int64, validCount)
-		for i := 0; i < validCount; i++ {
-			sorted[i] = atomic.LoadInt64(&u.durations[i])
-		}
-
-		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-		idx := int(float64(len(sorted)) * 0.9)
-		if idx >= len(sorted) {
-			idx = len(sorted) - 1
-		}
-		p90 = sorted[idx]
-	}
+	totalReq := u.orderMetrics.GetTotalRequests()
+	totalOrd := u.orderMetrics.GetTotalOrders()
+	p90 := u.orderMetrics.GetP90Duration()
 
 	return totalReq, totalOrd, p90
 }

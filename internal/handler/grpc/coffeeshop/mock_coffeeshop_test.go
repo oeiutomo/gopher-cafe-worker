@@ -10,6 +10,7 @@
 package coffeeshop
 
 import (
+	context "context"
 	coffeeshop "gopher-cafe/internal/entity/coffeeshop"
 	reflect "reflect"
 
@@ -41,17 +42,17 @@ func (m *MockCoffeeshopUsecase) EXPECT() *MockCoffeeshopUsecaseMockRecorder {
 }
 
 // ExecuteBrew mocks base method.
-func (m *MockCoffeeshopUsecase) ExecuteBrew(orders []coffeeshop.Order, baristas int) []coffeeshop.OrderResult {
+func (m *MockCoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []coffeeshop.Order, baristas int) []coffeeshop.OrderResult {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteBrew", orders, baristas)
+	ret := m.ctrl.Call(m, "ExecuteBrew", ctx, orders, baristas)
 	ret0, _ := ret[0].([]coffeeshop.OrderResult)
 	return ret0
 }
 
 // ExecuteBrew indicates an expected call of ExecuteBrew.
-func (mr *MockCoffeeshopUsecaseMockRecorder) ExecuteBrew(orders, baristas any) *gomock.Call {
+func (mr *MockCoffeeshopUsecaseMockRecorder) ExecuteBrew(ctx, orders, baristas any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteBrew", reflect.TypeOf((*MockCoffeeshopUsecase)(nil).ExecuteBrew), orders, baristas)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteBrew", reflect.TypeOf((*MockCoffeeshopUsecase)(nil).ExecuteBrew), ctx, orders, baristas)
 }
 
 // GetStats mocks base method.

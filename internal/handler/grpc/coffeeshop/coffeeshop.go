@@ -3,6 +3,7 @@ package coffeeshop
 
 import (
 	"context"
+	appCfg "gopher-cafe/config"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -22,19 +23,21 @@ type CoffeeshopUsecase interface {
 // Handler implements the gophercafepb.GopherCafeServiceServer interface
 type CoffeeshopGrpcHandler struct {
 	pb.UnimplementedGopherCafeServiceServer
-	uc CoffeeshopUsecase
+	uc          CoffeeshopUsecase
+	brewTimeout time.Duration
 }
 
-func NewCoffeeshopGrpcHandler(uc CoffeeshopUsecase) *CoffeeshopGrpcHandler {
+func NewCoffeeshopGrpcHandler(cafeCfg *appCfg.CafeConfig, uc CoffeeshopUsecase) *CoffeeshopGrpcHandler {
 	return &CoffeeshopGrpcHandler{
-		uc: uc,
+		uc:          uc,
+		brewTimeout: cafeCfg.BrewTimeout,
 	}
 }
 
 // ExecuteBrew (CRP-01) triggers the simulation
 func (h *CoffeeshopGrpcHandler) ExecuteBrew(ctx context.Context, req *pb.ExecuteBrewRequest) (*pb.ExecuteBrewResponse, error) {
 	// TODO: put 2s as config
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), h.brewTimeout)
 	defer cancel()
 
 	logger.Infof("Incoming request: %+v", req)
