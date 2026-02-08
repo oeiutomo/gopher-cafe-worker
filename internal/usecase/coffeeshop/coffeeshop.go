@@ -41,7 +41,7 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 	wg.Add(baristas)
 
 	for i := 0; i < baristas; i++ {
-		// barisa goroutine
+		// barista goroutine
 		go func(id int) {
 			defer wg.Done()
 
@@ -55,7 +55,13 @@ func (u *CoffeeshopUsecase) ExecuteBrew(ctx context.Context, orders []entity.Ord
 
 					// processOrder
 					if err := u.processStep(ctx, step); err != nil {
-						return
+						logger.ErrorKV("failed to processStep",
+							logger.KV("host", "localhost"),
+							logger.KV("order", order),
+							logger.KV("step", step),
+							logger.KV("error", err),
+						)
+						break
 					}
 
 					res.Steps = append(res.Steps, entity.StepExecution{
