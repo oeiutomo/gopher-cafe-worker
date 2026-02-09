@@ -118,9 +118,5 @@ func (u *CoffeeshopUsecase) doProcessStep(ctx context.Context, step *entity.Reci
 }
 
 func (u *CoffeeshopUsecase) GetStats() (int64, int64, int64) {
-	totalReq := u.orderMetrics.GetTotalRequests()
-	totalOrd := u.orderMetrics.GetTotalOrders()
-	p90 := u.orderMetrics.GetP90Duration()
-
-	return totalReq, totalOrd, p90
+	return u.orderMetrics.GetStats()
 }
