@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gopher-cafe/cmd/grpc/interceptor"
 	coffeeshop "gopher-cafe/internal/usecase/metrics"
 	"log"
 	"net"
@@ -38,10 +39,10 @@ func main() {
 	// Initialize the Layers
 	orderMetrics := coffeeshop.NewOrderMetrics(cfg.Cafe.OrderDurationsCap)
 	coffeeUsecase := usecase.NewCoffeeshopUsecase(orderMetrics)
-	coffeeHandler := handler.NewCoffeeshopGrpcHandler(&cfg.Cafe, coffeeUsecase)
+	coffeeHandler := handler.NewCoffeeshopGrpcHandler(coffeeUsecase)
 
 	// Create the gRPC Server instance
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor.TimeoutInterceptor(cfg.Cafe.BrewTimeout)))
 
 	// Register the Service (The "Route Definition")
 	// This tells the gRPC server to route incoming GopherCafe calls to our handler.
